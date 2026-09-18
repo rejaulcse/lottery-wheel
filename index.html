@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>মাসিক লটারি হুইল</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -884,6 +887,15 @@
     safeSet("lottery-history-v2", data.history);
     location.reload();
   });
+
+  // ---- keep the app fresh: never serve a stale cached copy ----
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("sw.js").catch(function(){
+        // ignored — e.g. running inside a preview that can't register a worker
+      });
+    });
+  }
 
 })();
 </script>
