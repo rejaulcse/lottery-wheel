@@ -236,6 +236,24 @@
   }
   .clear-btn:hover{ border-color: var(--gold-deep); color: var(--ink); }
 
+  .sync-box{
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    font-size: 12px;
+    resize: vertical;
+  }
+  .sync-divider{
+    border: none;
+    border-top: 1px dashed var(--card-border);
+    margin: 18px 0;
+  }
+
   .history-list{
     margin-top: 14px;
     display:flex;
@@ -398,10 +416,11 @@
   </div>
 
   <details class="panel" id="namesPanel">
-    <summary>সদস্যদের নাম (১২ জন)</summary>
+    <summary>🔒 সদস্যদের নাম (১২ জন)</summary>
     <div class="panel-body">
       <div class="name-grid" id="nameGrid"></div>
       <p class="hint">নাম লিখলেই সাথে সাথে সংরক্ষণ হয়ে যাবে। যিনি বিজয়ীদের খাতায় আছেন, তার নাম কাটা দেখাবে এবং হুইলে থাকবে না।</p>
+      <button class="clear-btn" id="changePassBtn">পাসওয়ার্ড পরিবর্তন করুন</button>
     </div>
   </details>
 
@@ -410,6 +429,22 @@
     <div class="panel-body">
       <div class="history-list" id="historyList"></div>
       <button class="clear-btn" id="clearHistoryBtn">পুরো খাতা মুছে ফেলুন</button>
+    </div>
+  </details>
+
+  <details class="panel" id="syncPanel">
+    <summary>🔁 অন্য ফোনে সিঙ্ক করুন</summary>
+    <div class="panel-body">
+      <p class="hint">যে ফোন থেকে নিয়মিত টস করা হয়, সেখান থেকে কোড তৈরি করে কপি করুন। এরপর অন্য যে ফোনে টস চালাবেন, সেই ফোনে এই একই অ্যাপ খুলে কোডটি নিচের ঘরে বসিয়ে "ইমপোর্ট করুন" চাপুন — সেই ফোনও হালনাগাদ নাম ও বিজয়ীদের তালিকা পেয়ে যাবে।</p>
+      <button class="clear-btn" id="exportBtn">এই ফোনের কোড তৈরি করুন</button>
+      <textarea class="sync-box" id="exportBox" rows="3" readonly style="display:none;"></textarea>
+      <button class="clear-btn" id="copyExportBtn" style="display:none;">কোড কপি করুন</button>
+
+      <hr class="sync-divider">
+
+      <p class="hint">অন্য ফোন থেকে পাওয়া কোডটি এখানে বসান:</p>
+      <textarea class="sync-box" id="importBox" rows="3" placeholder="কোড এখানে পেস্ট করুন"></textarea>
+      <button class="clear-btn" id="importBtn">ইমপোর্ট করুন</button>
     </div>
   </details>
 </div>
@@ -481,6 +516,58 @@
     for(var i=0;i<COUNT;i++){ if(!won[i]) pool.push(i); }
     return pool;
   }
+
+  // ---- password protection for the names panel ----
+  var namesPanel = document.getElementById("namesPanel");
+  var namesSummary = namesPanel.querySelector("summary");
+  var unlockedThisSession = false;
+
+  function getPass(){ return safeGet("lottery-admin-pass-v1", null); }
+
+  namesSummary.addEventListener("click", function(e){
+    e.preventDefault();
+    if(namesPanel.open){
+      namesPanel.open = false;
+      return;
+    }
+    if(unlockedThisSession){
+      namesPanel.open = true;
+      return;
+    }
+    var stored = getPass();
+    if(stored === null){
+      var created = prompt("সদস্য যোগ/সম্পাদনার জন্য একটি পাসওয়ার্ড সেট করুন:");
+      if(created === null || created.trim() === "") return;
+      safeSet("lottery-admin-pass-v1", created.trim());
+      unlockedThisSession = true;
+      namesPanel.open = true;
+    }else{
+      var entered = prompt("সদস্য যোগ/সম্পাদনা করতে পাসওয়ার্ড দিন:");
+      if(entered === null) return;
+      if(entered === stored){
+        unlockedThisSession = true;
+        namesPanel.open = true;
+      }else{
+        alert("পাসওয়ার্ড ভুল হয়েছে।");
+      }
+    }
+  });
+
+  document.getElementById("changePassBtn").addEventListener("click", function(){
+    var stored = getPass();
+    if(stored !== null){
+      var current = prompt("বর্তমান পাসওয়ার্ড দিন:");
+      if(current === null) return;
+      if(current !== stored){
+        alert("পাসওয়ার্ড মিলেনি।");
+        return;
+      }
+    }
+    var next = prompt("নতুন পাসওয়ার্ড লিখুন:");
+    if(next === null || next.trim() === "") return;
+    safeSet("lottery-admin-pass-v1", next.trim());
+    alert("পাসওয়ার্ড পরিবর্তন করা হয়েছে।");
+  });
 
   // ---- build name inputs ----
   var grid = document.getElementById("nameGrid");
@@ -737,6 +824,65 @@
       overlay.classList.remove("show");
       confettiLayer.innerHTML = "";
     }
+  });
+
+  // ---- export / import sync ----
+  var exportBtn = document.getElementById("exportBtn");
+  var exportBox = document.getElementById("exportBox");
+  var copyExportBtn = document.getElementById("copyExportBtn");
+  var importBox = document.getElementById("importBox");
+  var importBtn = document.getElementById("importBtn");
+
+  exportBtn.addEventListener("click", function(){
+    var payload = { v: 1, names: names, history: history };
+    var code;
+    try{
+      code = btoa(encodeURIComponent(JSON.stringify(payload)));
+    }catch(e){
+      alert("কোড তৈরি করা যায়নি।");
+      return;
+    }
+    exportBox.value = code;
+    exportBox.style.display = "block";
+    copyExportBtn.style.display = "block";
+  });
+
+  copyExportBtn.addEventListener("click", function(){
+    exportBox.focus();
+    exportBox.select();
+    exportBox.setSelectionRange(0, 999999);
+    function done(){
+      var old = copyExportBtn.textContent;
+      copyExportBtn.textContent = "কপি হয়েছে ✓";
+      setTimeout(function(){ copyExportBtn.textContent = old; }, 1600);
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(exportBox.value).then(done).catch(function(){
+        try{ document.execCommand("copy"); done(); }catch(e){}
+      });
+    }else{
+      try{ document.execCommand("copy"); done(); }catch(e){}
+    }
+  });
+
+  importBtn.addEventListener("click", function(){
+    var raw = importBox.value.trim();
+    if(!raw) return;
+    var data;
+    try{
+      data = JSON.parse(decodeURIComponent(atob(raw)));
+    }catch(e){
+      alert("কোডটি সঠিক নয়। আবার চেক করে বসান।");
+      return;
+    }
+    if(!data || !Array.isArray(data.names) || data.names.length !== COUNT || !Array.isArray(data.history)){
+      alert("কোডটি সঠিক নয়।");
+      return;
+    }
+    if(!confirm("এই ফোনের বর্তমান নাম ও বিজয়ীদের তালিকা মুছে নতুন কোডের তথ্য বসানো হবে। এগিয়ে যেতে চান?")) return;
+    safeSet("lottery-names-v1", data.names);
+    safeSet("lottery-history-v2", data.history);
+    location.reload();
   });
 
 })();
