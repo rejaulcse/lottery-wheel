@@ -20,7 +20,8 @@ A single-file, offline-capable web app for running a fair monthly lottery draw a
 
 | File | Purpose |
 |---|---|
-| `lottery-wheel.html` | The complete app — open it directly in any browser. |
+| `index.html` (or `lottery-wheel.html`) | The complete app — open it directly in any browser. |
+| `sw.js` | A small service worker that forces the app to always fetch the latest version instead of showing a stale cached copy. Must sit in the same folder as the HTML file. |
 
 ## How to use
 
@@ -41,3 +42,4 @@ A single-file, offline-capable web app for running a fair monthly lottery draw a
 - Pure HTML, CSS, and vanilla JavaScript — no build step, no dependencies.
 - Data (names, win history) is saved in the browser's local storage, per device/browser.
 - Fonts: Hind Siliguri and Tiro Bangla (loaded from Google Fonts) for Bengali text.
+- `sw.js` registers as a service worker that fetches every request fresh from the network (`cache: "no-store"`), so re-opening the app always shows the latest uploaded version instead of a stale cached one. Both files need to be uploaded together and kept in the repo's root folder for this to work.
